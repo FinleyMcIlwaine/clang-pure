@@ -20,6 +20,7 @@ module Language.C.Clang.Type
   , typeCanonicalType
   , typeElementType
   , typePointeeType
+  , typeResultType
   , typeSizeOf
   , typeSpelling
   , typeKind
