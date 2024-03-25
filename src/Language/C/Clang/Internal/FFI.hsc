@@ -583,6 +583,42 @@ typeResultType t = uderef t $ \tp -> do
     then return Nothing
     else (Just . Type) <$> newLeaf (parent t) (\_ -> return ( etp, free etp ))
 
+typeNumArgTypes :: Type -> Maybe Int
+typeNumArgTypes t = uderef t $ \tp -> do
+    as <- [C.exp| int { clang_getNumArgTypes(*$(CXType *tp)) } |]
+    return $ if as == -1 then Nothing else Just (fromIntegral as)
+
+typeArgType :: Type -> Int -> Maybe Type
+typeArgType t i = do
+    let ci = fromIntegral i
+    uderef t $ \tp -> do
+      etp <- [C.block| CXType* {
+        CXType type = clang_getArgType(*$(CXType *tp), $(int ci));
+
+        if (type.kind == CXType_Invalid) {
+          return NULL;
+        }
+
+        return ALLOC(type);
+        } |]
+      if etp == nullPtr
+        then return Nothing
+        else (Just . Type) <$> newLeaf (parent t) (\_ -> return ( etp, free etp ))
+
+typeDeclaration :: Type -> Maybe Cursor
+typeDeclaration t = uderef t $ \tp -> do
+  rcp <- [C.block| CXCursor* {
+    CXCursor ref = clang_getTypeDeclaration(*$(CXType *tp));
+    if (clang_Cursor_isNull(ref)) {
+      return NULL;
+    }
+
+    return ALLOC(ref);
+    } |]
+  if rcp /= nullPtr
+    then (Just . Cursor) <$> newLeaf (parent t) (\_ -> return ( rcp, free rcp ))
+    else return Nothing
+
 typeKind :: Type -> TypeKind
 typeKind t = uderef t $ fmap parseTypeKind . #peek CXType, kind
 
@@ -646,6 +682,11 @@ eitherTypeLayoutErrorOrWord64 n = case n of
   #{const CXTypeLayoutError_Incomplete} -> Left TypeLayoutErrorIncomplete
   #{const CXTypeLayoutError_Dependent} -> Left TypeLayoutErrorDependent
   _ -> Right $ fromIntegral n
+
+typeAlignOf :: Type -> Either TypeLayoutError Word64
+typeAlignOf t = uderef t $ \tp ->
+  eitherTypeLayoutErrorOrWord64 <$>
+  [C.exp| long long { clang_Type_getAlignOf(*$(CXType *tp)) } |]
 
 typeSizeOf :: Type -> Either TypeLayoutError Word64
 typeSizeOf t = uderef t $ \tp ->
@@ -742,3 +783,12 @@ instance Show File where
     "File { fileName = "
     ++ show (fileName f)
     ++ "}"
+
+getNumDiagnostics :: TranslationUnit -> Int
+getNumDiagnostics tu = do
+    uderef tu $ \tup -> do
+      nd <-
+        [C.exp|
+          int { clang_getNumDiagnostics($(CXTranslationUnit tup)) }
+        |]
+      return $ fromIntegral nd

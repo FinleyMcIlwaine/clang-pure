@@ -21,6 +21,10 @@ module Language.C.Clang.Type
   , typeElementType
   , typePointeeType
   , typeResultType
+  , typeNumArgTypes
+  , typeArgType
+  , typeDeclaration
+  , typeAlignOf
   , typeSizeOf
   , typeSpelling
   , typeKind
